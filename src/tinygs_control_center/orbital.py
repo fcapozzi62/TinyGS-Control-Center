@@ -155,8 +155,8 @@ def doppler_profile(omm: dict, station: Station, aos: datetime, tca: datetime,
             labels.append("LOS")
         result.append({
             "event": "/".join(labels) if labels else "sample",
-            "time_utc": timestamp.isoformat(timespec="seconds"),
-            "time_local": timestamp.astimezone(tz).isoformat(timespec="seconds"),
+            "time_utc": timestamp.isoformat(timespec="microseconds"),
+            "time_local": timestamp.astimezone(tz).isoformat(timespec="microseconds"),
             "elevation_deg": round(float(altitude.degrees), 3),
             "azimuth_deg": round(float(azimuth.degrees) % 360, 3),
             "range_km": round(range_km, 3),

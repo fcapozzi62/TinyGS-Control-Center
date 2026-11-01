@@ -53,6 +53,25 @@ def build_parser() -> argparse.ArgumentParser:
     doppler.add_argument("--hours", type=float, default=24.0)
     doppler.add_argument("--freq-mhz", type=float, required=True)
     doppler.add_argument("--step-sec", type=int, default=60)
+    simulation = commands.add_parser(
+        "simulate-doppler", help="Offline threshold-based retune comparison"
+    )
+    simulation.add_argument("norad", type=int)
+    simulation.add_argument("--station", required=True)
+    simulation.add_argument("--start", help="Timezone-aware ISO-8601 start")
+    simulation.add_argument("--hours", type=float, default=24.0)
+    simulation.add_argument("--freq-mhz", type=float, required=True)
+    simulation.add_argument("--thresholds", type=float, nargs="+",
+                            default=[100.0, 250.0, 500.0],
+                            help="One or more residual-frequency thresholds in Hz")
+    simulation.add_argument("--step-sec", type=int, default=1,
+                            help="Virtual clock sample cadence (default: 1 second)")
+    simulation.add_argument("--busy-period-sec", type=int, default=0,
+                            help="Synthetic periodic packet activity, 0 disables")
+    simulation.add_argument("--busy-duration-sec", type=int, default=0,
+                            help="Synthetic busy duration at each period start")
+    simulation.add_argument("--show-retunes", action="store_true",
+                            help="Include all hypothetical retune events")
     return parser
 
 
@@ -97,6 +116,53 @@ def main(argv: list[str] | None = None) -> int:
                 from dataclasses import asdict
                 items = [asdict(s) for s in StationStore(catalog.conn).list()]
                 print(json.dumps(items, indent=2))
+                return 0
+            if args.command == "simulate-doppler":
+                from .orbital import doppler_profile, predict_passes
+                from .simulator import simulate_threshold
+                site = StationStore(catalog.conn).get(args.station)
+                if site is None:
+                    raise ValueError(f"Station not found: {args.station}")
+                entry = catalog.latest(args.norad)
+                if entry is None:
+                    raise ValueError(f"Satellite NORAD {args.norad} not found")
+                start = (datetime.fromisoformat(args.start.replace("Z", "+00:00"))
+                         if args.start else datetime.now(timezone.utc))
+                if not 1 <= args.step_sec <= 60:
+                    raise ValueError("Simulation step must be between 1 and 60 seconds")
+                # The simulator has a virtual clock: it never sleeps or sends MQTT.
+                windows = predict_passes(entry["omm"], site, start,
+                                         args.hours, args.freq_mhz)
+                simulations = []
+                for p in windows:
+                    parse = datetime.fromisoformat
+                    samples = doppler_profile(
+                        entry["omm"], site, parse(p.aos_utc), parse(p.tca_utc),
+                        parse(p.los_utc), args.freq_mhz, args.step_sec)
+                    strategies = []
+                    for threshold in args.thresholds:
+                        result = simulate_threshold(
+                            samples, threshold,
+                            busy_period_s=args.busy_period_sec,
+                            busy_duration_s=args.busy_duration_sec)
+                        if not args.show_retunes:
+                            result.pop("retunes")
+                        strategies.append(result)
+                    simulations.append({
+                        "aos_local": p.aos_local,
+                        "tca_local": p.tca_local,
+                        "los_local": p.los_local,
+                        "max_elevation_deg": p.max_elevation_deg,
+                        "strategies": strategies
+                    })
+                print(json.dumps({
+                    "norad_cat_id": args.norad, "station": site.name,
+                    "source": entry["source"], "epoch": entry["epoch"],
+                    "carrier_mhz": args.freq_mhz,
+                    "sample_step_seconds": args.step_sec,
+                    "model": "offline_ideal_instantaneous_retune",
+                    "passes": simulations
+                }, indent=2))
                 return 0
             if args.command == "doppler":
                 from .orbital import doppler_profile, predict_passes

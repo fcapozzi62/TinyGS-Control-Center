@@ -44,3 +44,36 @@ tens of Hz per second near TCA; rounding a time to a whole second before
 replaying it may materially alter the predicted shift. The `doppler`
 command uses the precise predicted event timestamps and rounds the
 displayed shift only after performing the calculation.
+
+## Virtual-clock retune strategy simulator
+
+```sh
+tcc simulate-doppler 101140 --station roma-demo1 \
+  --start 2026-11-01T18:00:00Z --hours 2 \
+  --freq-mhz 401.7 --thresholds 100 250 500 --step-sec 1
+```
+
+For a synthetic test with regularly occurring packet-busy windows:
+
+```sh
+tcc simulate-doppler 101140 --station roma-demo1 \
+  --start 2026-11-01T18:00:00Z --hours 2 \
+  --freq-mhz 401.7 --thresholds 100 250 500 \
+  --step-sec 1 --busy-period-sec 30 --busy-duration-sec 5 \
+  --show-retunes
+```
+
+The simulation samples receive Doppler at the given **virtual clock** cadence.
+It sets the initial tuned offset to the Doppler at AOS and holds it until the
+absolute *difference* from the desired offset reaches the chosen threshold.
+At the first idle sample exceeding the threshold, it instantaneously retunes.
+If an artificial packet-busy interval is active, the retune is deferred.
+
+Metrics are **sample based**, not continuous-time guarantees: a large step
+can underestimate maximum residual error or miss an excursion. The threshold
+does not cover oscillator errors, stepwise synthesizer quantization, on-air
+interruptions, retune latency or actual radio state. Busy periods are synthetic,
+not obtained from TinyGS. The model currently assumes an instantaneous zero-cost
+retune and no buffering or missed packets. `retunes_after_aos` excludes the
+initial AOS tune. The `--show-retunes` flag emits each hypothetical event.
+**No MQTT, RF hardware, or TinyGS official service is contacted.**

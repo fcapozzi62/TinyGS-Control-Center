@@ -58,6 +58,16 @@ tcc passes 101140 --station roma-demo --start 2026-11-01T00:00:00Z --hours 48 --
 
 The sample coordinates are illustrative only. See [pass prediction](docs/pass-prediction.md).
 
+### Doppler retune simulation (offline)
+
+```bash
+tcc simulate-doppler 101140 --station roma-demo1 --start 2026-11-01T18:00:00Z --hours 2 --freq-mhz 401.7 --thresholds 100 250 500 --step-sec 1
+```
+
+Compare predicted retune counts and sample-based residual errors without
+sending any hardware commands. See [pass prediction notes](docs/pass-prediction.md)
+for limits and a synthetic packet-busy test.
+
 ### Design notes
 
 - The database stores original parsed OMM objects as JSON and extracts only a few indexed fields.
