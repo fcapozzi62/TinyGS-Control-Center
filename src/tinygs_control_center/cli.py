@@ -74,6 +74,15 @@ def build_parser() -> argparse.ArgumentParser:
                             help="Include original TinyGS 4s/1200Hz algorithm")
     simulation.add_argument("--legacy-refresh-sec", type=float, default=4.0)
     simulation.add_argument("--legacy-tolerance-hz", type=float, default=1200.0)
+    simulation.add_argument("--with-rf-model", action="store_true",
+                            help="Include SX1262-inspired offline RF model")
+    simulation.add_argument("--rf-latency-ms", type=float, default=6.2)
+    simulation.add_argument("--rf-step-hz", type=float,
+                            default=32_000_000 / (2 ** 25))
+    simulation.add_argument("--rf-packet-period-sec", type=float, default=0.0)
+    simulation.add_argument("--rf-packet-duration-ms", type=float, default=0.0)
+    simulation.add_argument("--rf-no-defer", action="store_true",
+                            help="Allow RF retunes while a synthetic packet is active")
     simulation.add_argument("--show-retunes", action="store_true",
                             help="Include all hypothetical retune events")
     return parser
@@ -152,6 +161,19 @@ def main(argv: list[str] | None = None) -> int:
                         if not args.show_retunes:
                             result.pop("retunes")
                         strategies.append(result)
+                    if args.with_rf_model:
+                        from .rf_simulator import simulate_rf
+                        for threshold in args.thresholds:
+                            rf = simulate_rf(
+                                samples, threshold, args.freq_mhz,
+                                latency_ms=args.rf_latency_ms,
+                                synthesizer_step_hz=args.rf_step_hz,
+                                packet_period_s=args.rf_packet_period_sec,
+                                packet_duration_ms=args.rf_packet_duration_ms,
+                                defer_while_busy=not args.rf_no_defer)
+                            if not args.show_retunes:
+                                rf.pop("retunes")
+                            strategies.append(rf)
                     if args.with_tinygs_legacy:
                         legacy = simulate_tinygs_legacy(
                             samples, tolerance_hz=args.legacy_tolerance_hz,
