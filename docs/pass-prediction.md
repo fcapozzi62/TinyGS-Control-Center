@@ -109,3 +109,45 @@ samples, real retune latency, synthesizer rounding and packet corruption
 are still outside the simulation. Compare at multiple virtual-clock steps
 and validate real SX1262 retunes with receiver logs before selecting an FSK
 threshold. The legacy comparison reports the same pre-decision metric.
+
+## SX1262-inspired RF model (offline)
+
+Enable the optional model in the `simulate-doppler` CLI:
+
+```sh
+tcc simulate-doppler 101140 --station roma-demo1 \
+  --start 2026-11-01T18:00:00Z --hours 2 --freq-mhz 401.7 \
+  --thresholds 100 250 500 --step-sec 1 \
+  --with-rf-model --rf-latency-ms 6.2 \
+  --rf-packet-period-sec 30 --rf-packet-duration-ms 500 \
+  --with-tinygs-legacy --show-retunes
+```
+
+This is a **synthetic, sampled model**, not a physical SX1262 emulator.
+The starting AOS tune is assumed complete. At each Doppler sample the model
+can initiate a retune when the absolute frequency error exceeds the threshold.
+The target receiver frequency is quantized with a nominal 32 MHz crystal and
+a 25-bit SX126x frequency register, giving a ~0.953674 Hz step. A configurable
+retune latency (6.2 ms by default, from a previous prototype measurement)
+makes the receiver unavailable until completion. The control loop observes
+frequency updates at the specified sample cadence, not continuously.
+
+Periodic packet windows are *synthetic fixtures*. By default, if a retune
+decision coincides with an active packet window it is deferred to the next
+sample. A retune can still start just before a packet and overlap that
+window: `synthetic_packets_overlapped` counts such distinct windows.
+With `--rf-no-defer`, retunes are also permitted within a packet.
+The count is **not measured packet loss** and cannot estimate decode success.
+This model assumes an accurate packet-busy signal, which is **not yet
+established as available** through the TinyGS MQTT firmware interface.
+
+The result includes frequency error before decisions, residual sampled
+error after decisions, number of retunes, receiver unavailable time, number
+of sampled ticks inside an ongoing retune, synthetic busy deferrals and
+overlapping packet windows. During the RF-unavailable interval the reported
+post-retune frequency error is diagnostic only, not an actual demodulation
+error. Real oscillator offset/drift, sample timing jitter, MCU execution,
+radio wake-up/settling variability, packet timing distributions, missed
+frames and sensitivity to frequency offset remain excluded. In particular
+the numeric retune latency and register step are **configurable assumptions**;
+they are not guaranteed performance for every board.
