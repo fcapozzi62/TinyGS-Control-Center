@@ -21,3 +21,18 @@ Optional Doppler at TCA is the signed geometric **receiver** frequency shift:
 positive means higher observed carrier, excluding equipment offsets and drift.
 The OMM epoch and its age at TCA are included; there is no automatic freshness
 approval in this version. This is not a radio controller.
+
+## Doppler profile test
+
+For a 2-hour window around the 1 November 2026 evening FOSSASAT-2E27 pass:
+
+```sh
+tcc doppler 101140 --station roma-demo1 --start 2026-11-01T18:00:00Z --hours 2 --freq-mhz 401.7 --step-sec 60
+```
+
+The command includes AOS, exact TCA, LOS and interval samples. It reports
+received geometric Doppler in Hz (positive for approaching satellite), range
+rate in km/s, apparent received frequency in MHz, elevation and azimuth.
+It does **not** send commands to a receiver. This is an ideal geometric
+prediction; it excludes RF oscillator errors and calibration offsets. Verify
+AOS/LOS station threshold and timezone when comparing with other trackers.

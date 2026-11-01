@@ -101,3 +101,65 @@ def predict_passes(omm: dict, station: Station, start: datetime,
                 round((tca - epoch).total_seconds()/86400, 3)))
             rise = peak = None
     return result
+
+def doppler_profile(omm: dict, station: Station, aos: datetime, tca: datetime,
+                    los: datetime, carrier_mhz: float, step_seconds: int = 60) -> list[dict]:
+    """Compute receive Doppler samples, including exact AOS, TCA and LOS.
+
+    Uses geometric range rate (not an oscillator estimate or hardware command).
+    AOS/LOS should be taken from the same pass prediction and station.
+    """
+    station.validate()
+    if any(dt.tzinfo is None or dt.utcoffset() is None for dt in (aos, tca, los)):
+        raise ValueError("AOS/TCA/LOS must be timezone-aware")
+    aos, tca, los = (dt.astimezone(timezone.utc) for dt in (aos, tca, los))
+    if not aos < tca < los:
+        raise ValueError("Expected AOS < TCA < LOS")
+    if not math.isfinite(carrier_mhz) or carrier_mhz <= 0:
+        raise ValueError("Carrier MHz must be positive and finite")
+    if not isinstance(step_seconds, int) or not 1 <= step_seconds <= 3600:
+        raise ValueError("step_seconds must be 1..3600")
+    if (los - aos).total_seconds() > 24 * 3600:
+        raise ValueError("Doppler profile interval cannot exceed one day")
+
+    ts = load.timescale(builtin=True)
+    satellite = EarthSatellite.from_omm(ts, omm)
+    observer = wgs84.latlon(station.latitude_deg, station.longitude_deg,
+                            elevation_m=station.elevation_m)
+    relative = satellite - observer
+    points = {aos, tca, los}
+    sample = aos + timedelta(seconds=step_seconds)
+    while sample < los:
+        points.add(sample)
+        sample += timedelta(seconds=step_seconds)
+
+    tz = ZoneInfo(station.timezone_name)
+    result = []
+    for timestamp in sorted(points):
+        state = relative.at(ts.from_datetime(timestamp))
+        altitude, azimuth, distance = state.altaz()
+        # Radial range rate = dot(r, v) / |r|. This includes site rotation.
+        xyz = state.position.km
+        velocity = state.velocity.km_per_s
+        range_km = float(distance.km)
+        radial_km_s = sum(float(x) * float(v) for x, v in zip(xyz, velocity)) / range_km
+        shift_hz = -carrier_mhz * 1_000_000 * radial_km_s / SPEED_OF_LIGHT_KM_S
+        labels = []
+        if timestamp == aos:
+            labels.append("AOS")
+        if timestamp == tca:
+            labels.append("TCA")
+        if timestamp == los:
+            labels.append("LOS")
+        result.append({
+            "event": "/".join(labels) if labels else "sample",
+            "time_utc": timestamp.isoformat(timespec="seconds"),
+            "time_local": timestamp.astimezone(tz).isoformat(timespec="seconds"),
+            "elevation_deg": round(float(altitude.degrees), 3),
+            "azimuth_deg": round(float(azimuth.degrees) % 360, 3),
+            "range_km": round(range_km, 3),
+            "range_rate_km_s": round(radial_km_s, 5),
+            "doppler_hz": round(shift_hz, 2),
+            "received_frequency_mhz": round(carrier_mhz + shift_hz / 1e6, 9),
+        })
+    return result

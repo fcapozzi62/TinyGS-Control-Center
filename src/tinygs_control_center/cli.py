@@ -46,6 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
     passes.add_argument("--start", help="ISO-8601 aware start, e.g. 2026-11-01T00:00:00Z")
     passes.add_argument("--hours", type=float, default=24.0)
     passes.add_argument("--freq-mhz", type=float)
+    doppler = commands.add_parser("doppler", help="Sample Doppler throughout predicted passes")
+    doppler.add_argument("norad", type=int)
+    doppler.add_argument("--station", required=True)
+    doppler.add_argument("--start", help="Timezone-aware ISO-8601 start")
+    doppler.add_argument("--hours", type=float, default=24.0)
+    doppler.add_argument("--freq-mhz", type=float, required=True)
+    doppler.add_argument("--step-sec", type=int, default=60)
     return parser
 
 
@@ -90,6 +97,34 @@ def main(argv: list[str] | None = None) -> int:
                 from dataclasses import asdict
                 items = [asdict(s) for s in StationStore(catalog.conn).list()]
                 print(json.dumps(items, indent=2))
+                return 0
+            if args.command == "doppler":
+                from .orbital import doppler_profile, predict_passes
+                site = StationStore(catalog.conn).get(args.station)
+                if site is None:
+                    raise ValueError(f"Station not found: {args.station}")
+                entry = catalog.latest(args.norad)
+                if entry is None:
+                    raise ValueError(f"Satellite NORAD {args.norad} not found")
+                start = (datetime.fromisoformat(args.start.replace("Z", "+00:00"))
+                         if args.start else datetime.now(timezone.utc))
+                passes = predict_passes(entry["omm"], site, start, args.hours, args.freq_mhz)
+                results = []
+                for p in passes:
+                    parse = datetime.fromisoformat
+                    series = doppler_profile(
+                        entry["omm"], site,
+                        parse(p.aos_utc), parse(p.tca_utc), parse(p.los_utc),
+                        args.freq_mhz, args.step_sec,
+                    )
+                    results.append({"tca_local": p.tca_local,
+                                    "max_elevation_deg": p.max_elevation_deg,
+                                    "samples": series})
+                print(json.dumps({"norad_cat_id": args.norad, "station": site.name,
+                                  "source": entry["source"], "epoch": entry["epoch"],
+                                  "carrier_mhz": args.freq_mhz,
+                                  "step_seconds": args.step_sec,
+                                  "passes": results}, indent=2))
                 return 0
             if args.command == "passes":
                 from .orbital import predict_passes
