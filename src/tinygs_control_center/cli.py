@@ -70,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
                             help="Synthetic periodic packet activity, 0 disables")
     simulation.add_argument("--busy-duration-sec", type=int, default=0,
                             help="Synthetic busy duration at each period start")
+    simulation.add_argument("--with-tinygs-legacy", action="store_true",
+                            help="Include original TinyGS 4s/1200Hz algorithm")
+    simulation.add_argument("--legacy-refresh-sec", type=float, default=4.0)
+    simulation.add_argument("--legacy-tolerance-hz", type=float, default=1200.0)
     simulation.add_argument("--show-retunes", action="store_true",
                             help="Include all hypothetical retune events")
     return parser
@@ -119,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.command == "simulate-doppler":
                 from .orbital import doppler_profile, predict_passes
-                from .simulator import simulate_threshold
+                from .simulator import simulate_threshold, simulate_tinygs_legacy
                 site = StationStore(catalog.conn).get(args.station)
                 if site is None:
                     raise ValueError(f"Station not found: {args.station}")
@@ -148,6 +152,13 @@ def main(argv: list[str] | None = None) -> int:
                         if not args.show_retunes:
                             result.pop("retunes")
                         strategies.append(result)
+                    if args.with_tinygs_legacy:
+                        legacy = simulate_tinygs_legacy(
+                            samples, tolerance_hz=args.legacy_tolerance_hz,
+                            refresh_s=args.legacy_refresh_sec)
+                        if not args.show_retunes:
+                            legacy.pop("retunes")
+                        strategies.append(legacy)
                     simulations.append({
                         "aos_local": p.aos_local,
                         "tca_local": p.tca_local,

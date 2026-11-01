@@ -1,6 +1,6 @@
 import unittest
 
-from tinygs_control_center.simulator import simulate_threshold
+from tinygs_control_center.simulator import simulate_threshold, simulate_tinygs_legacy
 
 
 def sample(t, shift):
@@ -50,3 +50,26 @@ class SimulatorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class LegacyTests(unittest.TestCase):
+    def test_four_second_checks_and_downward_overshoot(self):
+        data = [sample(t, 6000-100*t) for t in range(17)]
+        out = simulate_tinygs_legacy(data, tolerance_hz=1200, refresh_s=4)
+        self.assertEqual(out["checks_after_aos"], 4)
+        self.assertEqual(out["retunes_after_aos"], 1)
+        self.assertEqual(out["retunes"][0]["elapsed_s"], 16)
+        self.assertEqual(out["retunes"][0]["new_shift_hz"], 3200)
+        self.assertEqual(out["retunes"][0]["correction_hz"], -2800)
+
+    def test_strict_threshold_and_ascending(self):
+        data = [sample(t, 100*t) for t in range(13)]
+        out = simulate_tinygs_legacy(data, tolerance_hz=400, refresh_s=4)
+        self.assertEqual(out["retunes"][0]["elapsed_s"], 8)
+        self.assertEqual(out["retunes"][0]["new_shift_hz"], 400)
+        self.assertEqual(out["retunes_after_aos"], 1)
+
+    def test_invalid_inputs(self):
+        with self.assertRaises(ValueError):
+            simulate_tinygs_legacy([], tolerance_hz=1200)
+        with self.assertRaises(ValueError):
+            simulate_tinygs_legacy([sample(0,0)], refresh_s=0)

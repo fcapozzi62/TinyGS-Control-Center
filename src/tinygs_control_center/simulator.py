@@ -92,3 +92,68 @@ def simulate_threshold(samples: list[dict], threshold_hz: float, *,
         "rms_residual_hz": round(math.sqrt(sum(e*e for e in errors)/len(errors)), 2),
         "retunes": events,
     }
+
+
+def simulate_tinygs_legacy(samples: list[dict], *, tolerance_hz: float = 1200,
+                           refresh_s: float = 4.0) -> dict:
+    """Approximate the upstream TinyGS Doppler control defaults offline.
+
+    At each refresh check, when abs(new-applied)>tolerance, set the applied
+    Doppler to new-tolerance. Sampled checkpoints approximate firmware timing.
+    """
+    if not math.isfinite(tolerance_hz) or tolerance_hz <= 0:
+        raise ValueError("tolerance_hz must be finite and positive")
+    if not math.isfinite(refresh_s) or refresh_s <= 0:
+        raise ValueError("refresh_s must be finite and positive")
+    if not samples:
+        raise ValueError("Doppler samples are empty")
+    times = [datetime.fromisoformat(s["time_utc"]) for s in samples]
+    if any(t.tzinfo is None or t.utcoffset() is None for t in times):
+        raise ValueError("Sample timestamps require timezone offsets")
+    if any(b <= a for a, b in zip(times, times[1:])):
+        raise ValueError("Sample timestamps must increase strictly")
+    shifts = [float(s["doppler_hz"]) for s in samples]
+    if any(not math.isfinite(v) for v in shifts):
+        raise ValueError("Non-finite Doppler")
+    origin = times[0]
+    applied = shifts[0]
+    checks = 0
+    next_check_s = refresh_s
+    retunes = []
+    errors = []
+    over = 0
+    for t, s, desired in zip(times, samples, shifts):
+        elapsed = (t - origin).total_seconds()
+        if elapsed + 1e-9 >= next_check_s:
+            checks += 1
+            if abs(desired - applied) > tolerance_hz:
+                previous = applied
+                applied = desired - tolerance_hz
+                retunes.append({
+                    "time_utc": s["time_utc"],
+                    "time_local": s.get("time_local", s["time_utc"]),
+                    "elapsed_s": round(elapsed, 3),
+                    "old_shift_hz": round(previous, 2),
+                    "new_shift_hz": round(applied, 2),
+                    "correction_hz": round(applied - previous, 2),
+                    "reason": "tinygs_legacy_freqTol_exceeded",
+                })
+            next_check_s = (math.floor((elapsed + 1e-9) / refresh_s) + 1) * refresh_s
+        residual = desired - applied
+        errors.append(residual)
+        if abs(residual) >= tolerance_hz:
+            over += 1
+    return {
+        "strategy": "tinygs_legacy",
+        "tolerance_hz": tolerance_hz,
+        "refresh_s": refresh_s,
+        "checks_after_aos": checks,
+        "retunes_after_aos": len(retunes),
+        "initial_tune_at_aos": 1,
+        "sample_count": len(samples),
+        "over_tolerance_sample_count": over,
+        "max_abs_residual_hz": round(max(abs(e) for e in errors), 2),
+        "mean_abs_residual_hz": round(sum(abs(e) for e in errors) / len(errors), 2),
+        "rms_residual_hz": round(math.sqrt(sum(e*e for e in errors) / len(errors)), 2),
+        "retunes": retunes,
+    }

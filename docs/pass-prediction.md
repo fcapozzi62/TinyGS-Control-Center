@@ -77,3 +77,23 @@ not obtained from TinyGS. The model currently assumes an instantaneous zero-cost
 retune and no buffering or missed packets. `retunes_after_aos` excludes the
 initial AOS tune. The `--show-retunes` flag emits each hypothetical event.
 **No MQTT, RF hardware, or TinyGS official service is contacted.**
+
+## TinyGS firmware legacy strategy comparison
+
+Use `--with-tinygs-legacy` to include the original TinyGS-style decision
+rule: check every 4 seconds; if `abs(new_freqDoppler - freqDoppler)>1200`
+set the applied Doppler to `new_freqDoppler - 1200` Hz. This is not a
+correction to the exact expected frequency.
+
+```sh
+tcc simulate-doppler 101140 --station roma-demo1 \
+  --start 2026-11-01T18:00:00Z --hours 2 \
+  --freq-mhz 401.7 --thresholds 100 250 500 --step-sec 1 \
+  --with-tinygs-legacy --legacy-refresh-sec 4 --legacy-tolerance-hz 1200
+```
+
+This is a discrete approximation of upstream firmware defaults, **not a
+bit-exact hardware emulator**. The first check is anchored to AOS, though a
+real firmware loop has an independent timer; remote MQTT configuration can
+override both defaults. The legacy comparison does not defer for synthetic
+busy periods. Retune latencies and lost packets are not modeled.
