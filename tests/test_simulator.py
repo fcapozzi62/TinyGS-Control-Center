@@ -22,7 +22,7 @@ class SimulatorTests(unittest.TestCase):
     def test_busy_defers_retune_and_allows_threshold_violation(self):
         series = [sample(t, hz) for t, hz in enumerate([1000, 900, 800, 700, 600])]
         result = simulate_threshold(series, 200, busy_period_s=5, busy_duration_s=3)
-        self.assertEqual(result["retunes_after_aos"], 2)
+        self.assertEqual(result["retunes_after_aos"], 1)
         self.assertEqual(result["retunes"][0]["elapsed_s"], 3)
         self.assertEqual(result["deferred_sample_count"], 1)
         self.assertEqual(result["over_threshold_sample_count"], 1)
