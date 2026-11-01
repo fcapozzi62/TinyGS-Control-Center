@@ -66,7 +66,8 @@ class LegacyTests(unittest.TestCase):
         out = simulate_tinygs_legacy(data, tolerance_hz=400, refresh_s=4)
         self.assertEqual(out["retunes"][0]["elapsed_s"], 8)
         self.assertEqual(out["retunes"][0]["new_shift_hz"], 400)
-        self.assertEqual(out["retunes_after_aos"], 1)
+        self.assertEqual(out["retunes_after_aos"], 2)
+        self.assertEqual(out["retunes"][1]["elapsed_s"], 12)
 
     def test_invalid_inputs(self):
         with self.assertRaises(ValueError):
