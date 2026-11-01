@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinygs-control-center"
+version = "0.0.1"
+description = "Lightweight experimental satellite scheduling and MQTT control platform for TinyGS stations"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "TinyGS Control Center contributors"}]
+dependencies = []
+
+[project.scripts]
+tcc = "tinygs_control_center.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
