@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tinygs-control-center"
-version = "0.0.1"
+version = "0.1.0"
 description = "Lightweight experimental satellite scheduling and MQTT control platform for TinyGS stations"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "TinyGS Control Center contributors"}]
-dependencies = []
+dependencies = ["skyfield>=1.49,<2"]
 
 [project.scripts]
 tcc = "tinygs_control_center.cli:main"

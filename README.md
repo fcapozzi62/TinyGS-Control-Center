@@ -1,12 +1,12 @@
 # TinyGS Control Center
 
-> **Experimental pre-alpha — v0.0.1**
+> **Experimental pre-alpha — v0.1.0 development branch**
 
 An independent, open-source satellite scheduling and MQTT control project for TinyGS-compatible ground stations. **Not affiliated with or endorsed by the official TinyGS project.**
 
 The long-term goal is an explainable, pass-aware scheduler: numerical priorities (0–127), satellite-family policies, conflict resolution, whole-pass tracking and explicit preemption rules. The control application should run on modest Linux devices, including Raspberry Pi, without requiring a database server.
 
-## v0.0.1 — orbital catalog foundation
+## v0.1.0 (development) — orbital catalog and pass prediction
 
 This initial release deliberately has **no receiver control**. It provides:
 
@@ -16,11 +16,11 @@ This initial release deliberately has **no receiver control**. It provides:
 - A CelesTrak GP OMM JSON fetch command (requires network access).
 - Offline unit tests using Python's standard library.
 
-**Not implemented yet:** propagation, pass predictions, scheduling, NiceGUI, MQTT commands, TinyGS.com forwarding or an automated orbital update service. Nothing in this release transmits radio commands.
+**Not implemented yet:** scheduling, NiceGUI, MQTT commands, TinyGS.com forwarding or an automated orbital update service. Nothing in this release transmits radio commands.
 
 ### Requirements
 
-Python 3.11+; no third-party runtime packages. Supported target platforms include Linux x86-64 and ARM64 (Raspberry Pi); real-device resource measurements are still pending.
+Python 3.11+; Skyfield is required for pass prediction. Supported target platforms include Linux x86-64 and ARM64 (Raspberry Pi); real-device resource measurements are still pending.
 
 ### Quick start
 
@@ -48,6 +48,15 @@ To run tests:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+### Predict passes (development branch)
+
+```bash
+tcc station-add roma-demo --lat 41.9 --lon 12.5 --elevation-m 50 --timezone Europe/Rome --min-elevation 5
+tcc passes 101140 --station roma-demo --start 2026-11-01T00:00:00Z --hours 48 --freq-mhz 401.7
+```
+
+The sample coordinates are illustrative only. See [pass prediction](docs/pass-prediction.md).
 
 ### Design notes
 

@@ -6,6 +6,8 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from datetime import datetime, timezone
+from .stations import Station, StationStore
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -29,6 +31,21 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("list", help="List imported satellites")
     show = commands.add_parser("show", help="Show latest stored elements by NORAD ID")
     show.add_argument("norad", type=int)
+    station = commands.add_parser("station-add", help="Create or update a ground station")
+    station.add_argument("name")
+    station.add_argument("--lat", type=float, required=True)
+    station.add_argument("--lon", type=float, required=True)
+    station.add_argument("--elevation-m", type=float, default=0.0)
+    station.add_argument("--timezone", default="UTC")
+    station.add_argument("--min-elevation", type=float, default=0.0)
+    commands.add_parser("stations", help="List ground stations")
+
+    passes = commands.add_parser("passes", help="Predict satellite pass events")
+    passes.add_argument("norad", type=int)
+    passes.add_argument("--station", required=True)
+    passes.add_argument("--start", help="ISO-8601 aware start, e.g. 2026-11-01T00:00:00Z")
+    passes.add_argument("--hours", type=float, default=24.0)
+    passes.add_argument("--freq-mhz", type=float)
     return parser
 
 
@@ -63,6 +80,32 @@ def main(argv: list[str] | None = None) -> int:
             source = ""
 
         with OrbitalCatalog(args.db) as catalog:
+            if args.command == "station-add":
+                new = Station(args.name, args.lat, args.lon, args.elevation_m,
+                              args.timezone, args.min_elevation)
+                StationStore(catalog.conn).save(new)
+                print(f"Station saved: {new.name}")
+                return 0
+            if args.command == "stations":
+                from dataclasses import asdict
+                items = [asdict(s) for s in StationStore(catalog.conn).list()]
+                print(json.dumps(items, indent=2))
+                return 0
+            if args.command == "passes":
+                from .orbital import predict_passes
+                site = StationStore(catalog.conn).get(args.station)
+                if site is None:
+                    raise ValueError(f"Station not found: {args.station}")
+                entry = catalog.latest(args.norad)
+                if entry is None:
+                    raise ValueError(f"Satellite NORAD {args.norad} not found")
+                start = (datetime.fromisoformat(args.start.replace("Z", "+00:00"))
+                         if args.start else datetime.now(timezone.utc))
+                rows = predict_passes(entry["omm"], site, start, args.hours, args.freq_mhz)
+                print(json.dumps({"norad_cat_id": args.norad, "station": site.name,
+                                  "source": entry["source"], "epoch": entry["epoch"],
+                                  "passes": [p.as_dict() for p in rows]}, indent=2))
+                return 0
             if records is not None:
                 seen, inserted = catalog.import_records(records, source)
                 print(f"OMM: {seen} received, {inserted} new element sets stored")
