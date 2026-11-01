@@ -97,3 +97,15 @@ bit-exact hardware emulator**. The first check is anchored to AOS, though a
 real firmware loop has an independent timer; remote MQTT configuration can
 override both defaults. The legacy comparison does not defer for synthetic
 busy periods. Retune latencies and lost packets are not modeled.
+
+## Validation metrics and interpretation
+
+The simulator reports both `max_abs_pre_retune_error_hz` (maximum sampled
+frequency difference just before a decision) and `max_abs_residual_hz`
+(measured after any instantaneous retune at that sample). This prevents
+large frequency steps from being hidden by an idealized zero-latency retune.
+Neither metric guarantees a continuous-time RF error bound: peaks between
+samples, real retune latency, synthesizer rounding and packet corruption
+are still outside the simulation. Compare at multiple virtual-clock steps
+and validate real SX1262 retunes with receiver logs before selecting an FSK
+threshold. The legacy comparison reports the same pre-decision metric.
