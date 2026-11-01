@@ -61,7 +61,9 @@ def predict_passes(omm: dict, station: Station, start: datetime,
         return float(alt.degrees), float(az.degrees) % 360
 
     def stamp(dt, tz):
-        return dt.astimezone(tz).isoformat(timespec="seconds")
+        # Preserve sub-second precision: Doppler can vary by tens of Hz
+        # per second near TCA. Truncating here changes the replayed instant.
+        return dt.astimezone(tz).isoformat(timespec="microseconds")
 
     result = []
     rise = peak = None

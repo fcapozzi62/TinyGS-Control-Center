@@ -36,3 +36,11 @@ rate in km/s, apparent received frequency in MHz, elevation and azimuth.
 It does **not** send commands to a receiver. This is an ideal geometric
 prediction; it excludes RF oscillator errors and calibration offsets. Verify
 AOS/LOS station threshold and timezone when comparing with other trackers.
+
+## Sub-second time precision
+
+AOS/TCA/LOS timestamps now retain microseconds. Doppler can vary by
+tens of Hz per second near TCA; rounding a time to a whole second before
+replaying it may materially alter the predicted shift. The `doppler`
+command uses the precise predicted event timestamps and rounds the
+displayed shift only after performing the calculation.
