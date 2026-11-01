@@ -46,6 +46,7 @@ def simulate_threshold(samples: list[dict], threshold_hz: float, *,
     blocked_ticks = 0
     over_threshold_ticks = 0
     errors = []
+    pre_retune_errors = []
     events = []
     origin = times[0]
     for index, (timestamp, sample) in enumerate(zip(times, samples)):
@@ -57,6 +58,7 @@ def simulate_threshold(samples: list[dict], threshold_hz: float, *,
         busy = (busy_period_s > 0 and
                 (elapsed_s % busy_period_s) < busy_duration_s)
         pending_error = desired - tuned
+        pre_retune_errors.append(pending_error)
         if index > 0 and abs(pending_error) >= threshold_hz:
             if busy:
                 blocked_ticks += 1
@@ -87,6 +89,7 @@ def simulate_threshold(samples: list[dict], threshold_hz: float, *,
         "deferred_sample_count": blocked_ticks,
         "sample_count": len(samples),
         "over_threshold_sample_count": over_threshold_ticks,
+        "max_abs_pre_retune_error_hz": round(max(abs(e) for e in pre_retune_errors), 2),
         "max_abs_residual_hz": round(max(abs(e) for e in errors), 2),
         "mean_abs_residual_hz": round(sum(abs(e) for e in errors)/len(errors), 2),
         "rms_residual_hz": round(math.sqrt(sum(e*e for e in errors)/len(errors)), 2),
@@ -121,9 +124,11 @@ def simulate_tinygs_legacy(samples: list[dict], *, tolerance_hz: float = 1200,
     next_check_s = refresh_s
     retunes = []
     errors = []
+    pre_retune_errors = []
     over = 0
     for t, s, desired in zip(times, samples, shifts):
         elapsed = (t - origin).total_seconds()
+        pre_retune_errors.append(desired - applied)
         if elapsed + 1e-9 >= next_check_s:
             checks += 1
             if abs(desired - applied) > tolerance_hz:
