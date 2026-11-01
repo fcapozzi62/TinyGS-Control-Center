@@ -74,3 +74,34 @@ class LegacyTests(unittest.TestCase):
             simulate_tinygs_legacy([], tolerance_hz=1200)
         with self.assertRaises(ValueError):
             simulate_tinygs_legacy([sample(0,0)], refresh_s=0)
+
+class ValidationDiagnosticsTests(unittest.TestCase):
+    def test_instant_retune_does_not_hide_pre_retune_error(self):
+        data = [sample(0, 0), sample(1, 300), sample(2, 300)]
+        output = simulate_threshold(data, 100)
+        self.assertEqual(output["retunes_after_aos"], 1)
+        self.assertEqual(output["max_abs_residual_hz"], 0)
+        self.assertEqual(output["max_abs_pre_retune_error_hz"], 300)
+
+    def test_busy_window_exposes_uncompensated_error(self):
+        data = [sample(t, -100*t) for t in range(8)]
+        output = simulate_threshold(data, 200, busy_period_s=5, busy_duration_s=3)
+        self.assertGreater(output["max_abs_pre_retune_error_hz"],
+                           output["max_abs_residual_hz"] - 0.01)
+        self.assertGreater(output["deferred_sample_count"], 0)
+        self.assertTrue(all(event["elapsed_s"] % 5 >= 3
+                            for event in output["retunes"]))
+
+    def test_zero_change_has_no_retunes_or_residual(self):
+        data = [sample(t, 1200) for t in range(10)]
+        for tolerance in (100, 250, 500):
+            out = simulate_threshold(data, tolerance)
+            self.assertEqual(out["retunes_after_aos"], 0)
+            self.assertEqual(out["max_abs_pre_retune_error_hz"], 0)
+            self.assertEqual(out["rms_residual_hz"], 0)
+
+    def test_legacy_reports_pre_retune_peak_separately(self):
+        data = [sample(t, 6000-100*t) for t in range(17)]
+        out = simulate_tinygs_legacy(data, tolerance_hz=1200, refresh_s=4)
+        self.assertEqual(out["max_abs_pre_retune_error_hz"], 1600)
+        self.assertEqual(out["retunes_after_aos"], 1)
