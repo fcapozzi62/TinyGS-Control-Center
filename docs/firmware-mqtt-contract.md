@@ -115,3 +115,27 @@ change who owns the Doppler decision.
   any proposed retune deferral can be implemented safely in the firmware.
 - Calibrate actual RF frequency accuracy and frame yields by threshold
   on multiple passes.
+
+## Offline CLI prototype (implemented)
+
+The first protocol adapter is deliberately **dry-run only**. It does not
+connect to Mosquitto, write to SQLite, apply settings, or send any radio
+commands. Run with a **known station calibration offset** (example value):
+
+```sh
+tcc mqtt-dry-run --mqtt-user fabio --station IZ0IBA_GS2 \
+  --offset-hz 125 --tolerance-hz 250 --refresh-ms 1000
+```
+
+The command produces JSON with `mode: "dry-run"`, `published: false`,
+`topic`, `ack_topic`, a serialized JSON-array `payload` and typed
+`parameters`. The MQTT user is a topic identifier, **not a password**;
+never provide the MQTT password on the command line.
+
+The adapter refuses absent/invalid calibration offsets, non-finite values,
+unsafe MQTT topic segments and threshold/refresh values outside the
+`uint16_t` range 1..65535. An application-level safety check limits
+absolute offset to 100000 Hz; this limit is not a firmware specification.
+There is intentionally no default calibration offset and no publish flag.
+The station name must match the MQTT station identifier, which may differ
+from the local orbital catalog station label.
