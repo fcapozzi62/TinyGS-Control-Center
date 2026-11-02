@@ -20,7 +20,7 @@ class Ax100AnalyzerTests(unittest.TestCase):
         codeword = encode_golay24(0x1FF)
         self.assertEqual(decode_header(codeword)["minimum_distance_bits"], 0)
         self.assertEqual(decode_header(codeword)["decoded_frame_len"], 255)
-        for mask in (0x000001, 0x000101, 0x110101):
+        for mask in (0x000001, 0x000101, 0x010101):
             decoded = decode_header(codeword ^ mask)
             self.assertEqual(decoded["minimum_distance_bits"], mask.bit_count())
             self.assertEqual(decoded["decoded_frame_len"], 255)
