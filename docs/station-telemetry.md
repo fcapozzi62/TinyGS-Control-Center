@@ -123,6 +123,9 @@ tcc mqtt-monitor --host mqtt.tinygs.com --port 8883 \\
 unset TCC_MQTT_PASSWORD
 ```
 
-**Note:** `--cafile` is a planned CLI option and must be implemented
-before this example can be executed. Until then use `mosquitto_sub`
-for official TLS monitoring; do not downgrade official TLS to plaintext.
+`--cafile` enables TLS with certificate validation against the supplied
+CA PEM, including the official TinyGS self-signed root. The monitor
+still performs only SUBSCRIBE (no application-level MQTT PUBLISH).
+The optional `--summarize-stations` extracts observed scheduler
+commands and station reports at shutdown. Use `Ctrl+C` to end early.
+Keep the TLS root and MQTT credentials private.
