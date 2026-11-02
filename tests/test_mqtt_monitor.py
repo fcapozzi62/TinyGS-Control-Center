@@ -86,8 +86,20 @@ class TestMqttMonitor(unittest.TestCase):
                      "--mqtt-user", "tinygs_local", "--summarize-stations",
                      "--timeout-sec", "2"])
         self.assertEqual(code, 0)
-        self.assertTrue(mocked_monitor.call_args.args[-1])
+        self.assertTrue(mocked_monitor.call_args.args[-2])
+        self.assertIsNone(mocked_monitor.call_args.args[-1])
         self.assertEqual(mocked_monitor.call_args.args[2], "tinygs_local")
+
+    def test_cli_tls_ca_is_forwarded_without_network(self):
+        with patch.dict("os.environ", {"TCC_MQTT_PASSWORD": "test-only"}, clear=True):
+            with patch("tinygs_control_center.mqtt_monitor.monitor") as fake:
+                fake.return_value = 0
+                code = main(["mqtt-monitor", "--host", "mqtt.tinygs.com",
+                             "--port", "8883", "--mqtt-user", "official-id",
+                             "--cafile", "/tmp/synthetic-ca.pem",
+                             "--summarize-stations"])
+        self.assertEqual(code, 0)
+        self.assertEqual(fake.call_args.args[-1], "/tmp/synthetic-ca.pem")
 
     @patch.dict("os.environ", {}, clear=True)
     def test_cli_requires_password_without_opening_network(self):
