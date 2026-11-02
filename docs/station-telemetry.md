@@ -14,14 +14,20 @@ The firmware `tinyGS/src/Mqtt/MQTT_Client.cpp` on branch `beta` emits:
 | `tele/welcome` | `sat`, `version` | Initial connection/status; not definitive online evidence |
 | `stat/status` | `satellite`, `NORAD`, `mode`, `frequency`, `frequency_offset` | Radio state snapshot |
 | `tele/rx` | `satellite`, `NORAD`, `mode`, `frequency`, `f_doppler`, `rssi`, `snr`, `frequency_error`, `crc_error`, `noisy` | Received-frame report |
+| `cmnd/begine` | `sat`, `NORAD`, `mode`, `freq`, `bw`, `sf`, `cr`, `sw`, `pl` | Requested tuning profile (observed scheduler command) |
 
 Note that `tele/rx` fields come from a received frame's stored modem
 configuration and need not describe the currently selected satellite at
 the moment the report is ingested. `stat/status` reports the modem state
-at the time of the message. The first implementation reports
-`satellite` as the most recently observed value; do NOT treat this as
-a confirmed scheduler assignment. A later release will separate
-`configured_satellite` from `last_rx_satellite`.
+at the time of the message. An observed `cmnd/begine` message is
+**not an acknowledgement that the radio applied the new profile**.
+The registry now preserves separate `commanded_*`, `status_*`
+and `last_rx_*` fields and separate timestamps. The older top-level
+`satellite`, `mode`, `frequency_mhz` fields are retained for
+compatibility; these reflect the latest non-command observation and
+must not be interpreted as a scheduler assignment. The compact
+`tlx` string (and `filter`, IP, MAC, data) is never copied to
+the station summary; this iteration does not attempt to decode it.
 
 **Unknown topics, broken JSON and non-object payloads are ignored.**
 The registry deliberately does NOT retain IP, MAC, raw payloads,
@@ -55,8 +61,10 @@ not contact Mosquitto or write to SQLite.
 ## Remaining work
 
 - The monitor integration is now implemented via `--summarize-stations`.
-- Separate desired scheduler assignment, configured modem state and
-  last RX report in the station state model.
+- Add an explicit modem-configuration acknowledgement or reconciliation
+  rule; an observed scheduler command is not an applied configuration.
+- Correlate a command with subsequent status and RX reports, with
+  timestamps and reliable pass identifiers.
 - Determine explicit online/offline criteria and reboot detection.
 - Optional SQLite event history, bounded and privacy-conscious.
 - Compare reception statistics across pass/time windows and
@@ -73,7 +81,7 @@ adds an in-memory registry and prints one final JSON object after stopping:
 ```
 
 The `stations` array is empty if only unknown/test topics were received.
-Only `tele/welcome`, `tele/rx`, and `stat/status` with valid JSON
+Only `tele/welcome`, `tele/rx`, `stat/status` and `cmnd/begine` with valid JSON
 objects contribute to a station snapshot; `tinygs/test/control-center`
 does **not** count as genuine device telemetry. Reports remain ephemeral:
 no station rows or raw data are written to SQLite.
@@ -93,3 +101,28 @@ unset TCC_MQTT_PASSWORD
 This produces a summary only when the command completes or is interrupted.
 The monitor **does not publish** MQTT messages, change radio configuration,
 or cause official TinyGS traffic to appear on a different broker.
+
+## Monitoring the official TinyGS broker
+
+The firmware was observed receiving a real
+`tinygs/{account}/IZ0IBA_GS2/cmnd/begine` message for Tianqi
+(NORAD 62366, LoRa 400.45 MHz). A second client successfully subscribed
+and received the command, establishing **observability**, not authorization
+to take over scheduling or publish commands.
+
+After storing the official account credentials in the environment, the
+same read-only monitor can connect using the TLS CA certificate:
+
+```bash
+source ~/.tinygs-mqtt.env
+export TCC_MQTT_PASSWORD="$MQTT_PASS"
+tcc mqtt-monitor --host mqtt.tinygs.com --port 8883 \\
+  --mqtt-user "$MQTT_USER" --topic "tinygs/$MQTT_USER/IZ0IBA_GS2/#" \\
+  --timeout-sec 900 --summarize-stations \\
+  --cafile ~/.config/tinygs/tinygs-ca.pem
+unset TCC_MQTT_PASSWORD
+```
+
+**Note:** `--cafile` is a planned CLI option and must be implemented
+before this example can be executed. Until then use `mosquitto_sub`
+for official TLS monitoring; do not downgrade official TLS to plaintext.
