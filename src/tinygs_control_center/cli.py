@@ -53,6 +53,15 @@ def build_parser() -> argparse.ArgumentParser:
     doppler.add_argument("--hours", type=float, default=24.0)
     doppler.add_argument("--freq-mhz", type=float, required=True)
     doppler.add_argument("--step-sec", type=int, default=60)
+    mqtt_monitor = commands.add_parser(
+        "mqtt-monitor", help="Read MQTT telemetry only, never publish commands"
+    )
+    mqtt_monitor.add_argument("--host", required=True, help="MQTT broker hostname/IP")
+    mqtt_monitor.add_argument("--port", type=int, default=1883)
+    mqtt_monitor.add_argument("--mqtt-user", required=True)
+    mqtt_monitor.add_argument("--topic", default="tinygs/#")
+    mqtt_monitor.add_argument("--timeout-sec", type=float, default=30.0)
+    mqtt_monitor.add_argument("--max-messages", type=int, default=0)
     mqtt_dry = commands.add_parser(
         "mqtt-dry-run", help="Preview TinyGS Doppler foff message (no network)"
     )
@@ -121,6 +130,14 @@ def fetch_celestrak(norad: int) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "mqtt-monitor":
+            import os
+            from .mqtt_monitor import monitor
+            password = os.environ.get("TCC_MQTT_PASSWORD", "")
+            if not password:
+                raise ValueError("TCC_MQTT_PASSWORD environment variable is required")
+            return monitor(args.host, args.port, args.mqtt_user, password,
+                           args.topic, args.timeout_sec, args.max_messages)
         if args.command == "mqtt-dry-run":
             from .mqtt_adapter import DopplerConfig, build_foff_dry_run
             preview = build_foff_dry_run(
