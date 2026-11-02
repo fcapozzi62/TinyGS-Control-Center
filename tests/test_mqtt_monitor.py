@@ -63,6 +63,21 @@ class TestMqttMonitor(unittest.TestCase):
         self.assertEqual(summary["stations"][0]["rx_count"], 1)
         self.assertEqual(summary["stations"][0]["presence"], "observed_only")
 
+    def test_monitor_summary_accepts_scheduler_command_without_rx(self):
+        registry = StationRegistry()
+        received = SimpleNamespace(
+            topic="tinygs/account/IZ0IBA_GS2/cmnd/begine",
+            payload=json.dumps({"sat": "Tianqi", "NORAD": 62366,
+                                "mode": "LoRa", "freq": 400.45, "sf": 9}).encode(),
+            qos=0, retain=False,
+        )
+        process_monitor_message(received, registry)
+        summary = station_summary(registry)
+        self.assertEqual(summary["stations"][0]["commanded_satellite"], "Tianqi")
+        self.assertEqual(summary["stations"][0]["commanded_frequency_mhz"], 400.45)
+        self.assertEqual(summary["stations"][0]["rx_count"], 0)
+        self.assertIsNone(summary["stations"][0]["status_satellite"])
+
     @patch.dict("os.environ", {"TCC_MQTT_PASSWORD": "test-only"}, clear=True)
     @patch("tinygs_control_center.mqtt_monitor.monitor")
     def test_cli_summary_flag_is_forwarded(self, mocked_monitor):
