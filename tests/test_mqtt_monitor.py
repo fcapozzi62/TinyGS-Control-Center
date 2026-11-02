@@ -3,10 +3,13 @@ import contextlib
 import io
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from tinygs_control_center.cli import main
-from tinygs_control_center.mqtt_monitor import format_message, validate_monitor_settings
+from tinygs_control_center.mqtt_monitor import (format_message, validate_monitor_settings,
+                                                process_monitor_message, station_summary)
+from tinygs_control_center.telemetry import StationRegistry
 
 
 class TestMqttMonitor(unittest.TestCase):
@@ -39,6 +42,37 @@ class TestMqttMonitor(unittest.TestCase):
             with self.subTest(params=params):
                 with self.assertRaises(ValueError):
                     validate_monitor_settings(*params)
+
+    def test_summary_ignores_test_topic_and_collects_real_telemetry(self):
+        registry = StationRegistry()
+        def msg(topic, payload):
+            return SimpleNamespace(topic=topic, payload=payload, qos=0, retain=False)
+        test = msg("tinygs/test/control-center", b"hello")
+        self.assertEqual(process_monitor_message(test, registry)["payload"], "hello")
+        self.assertEqual(station_summary(registry)["stations"], [])
+        rx = msg("tinygs/fabio/IZ0IBA_GS2/tele/rx", json.dumps({
+            "satellite": "FOSSASAT-2E27", "NORAD": 101140,
+            "mode": "FSK", "frequency": 401.7,
+            "rssi": -120.0, "crc_error": False,
+        }).encode())
+        rendered = process_monitor_message(rx, registry)
+        self.assertEqual(rendered["topic"], rx.topic)
+        summary = station_summary(registry)
+        self.assertEqual(summary["type"], "station_summary")
+        self.assertEqual(len(summary["stations"]), 1)
+        self.assertEqual(summary["stations"][0]["rx_count"], 1)
+        self.assertEqual(summary["stations"][0]["presence"], "observed_only")
+
+    @patch.dict("os.environ", {"TCC_MQTT_PASSWORD": "test-only"}, clear=True)
+    @patch("tinygs_control_center.mqtt_monitor.monitor")
+    def test_cli_summary_flag_is_forwarded(self, mocked_monitor):
+        mocked_monitor.return_value = 0
+        code = main(["mqtt-monitor", "--host", "127.0.0.1",
+                     "--mqtt-user", "tinygs_local", "--summarize-stations",
+                     "--timeout-sec", "2"])
+        self.assertEqual(code, 0)
+        self.assertTrue(mocked_monitor.call_args.args[-1])
+        self.assertEqual(mocked_monitor.call_args.args[2], "tinygs_local")
 
     @patch.dict("os.environ", {}, clear=True)
     def test_cli_requires_password_without_opening_network(self):
