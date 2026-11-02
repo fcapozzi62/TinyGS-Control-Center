@@ -54,11 +54,42 @@ not contact Mosquitto or write to SQLite.
 
 ## Remaining work
 
-- Integrate the parser into `tcc mqtt-monitor` behind an explicit
-  `--summarize-stations` mode, keeping raw read-only monitoring intact.
+- The monitor integration is now implemented via `--summarize-stations`.
 - Separate desired scheduler assignment, configured modem state and
   last RX report in the station state model.
 - Determine explicit online/offline criteria and reboot detection.
 - Optional SQLite event history, bounded and privacy-conscious.
 - Compare reception statistics across pass/time windows and
   Doppler tolerance settings **using real reception records**.
+
+## Read-only live monitor with station summaries
+
+The monitor's default mode remains unchanged: it prints one JSON object for
+every MQTT message, with no registry. Opting in to `--summarize-stations`
+adds an in-memory registry and prints one final JSON object after stopping:
+
+```json
+{"type":"station_summary","stations":[]}
+```
+
+The `stations` array is empty if only unknown/test topics were received.
+Only `tele/welcome`, `tele/rx`, and `stat/status` with valid JSON
+objects contribute to a station snapshot; `tinygs/test/control-center`
+does **not** count as genuine device telemetry. Reports remain ephemeral:
+no station rows or raw data are written to SQLite.
+
+Example, on a trusted LAN (password is entered privately and is not
+passed on the command line):
+
+```bash
+read -r -s -p "MQTT password: " TCC_MQTT_PASSWORD; echo
+export TCC_MQTT_PASSWORD
+tcc mqtt-monitor --host 192.168.1.61 --port 1883 \
+  --mqtt-user tinygs_local --topic 'tinygs/#' \
+  --timeout-sec 60 --summarize-stations
+unset TCC_MQTT_PASSWORD
+```
+
+This produces a summary only when the command completes or is interrupted.
+The monitor **does not publish** MQTT messages, change radio configuration,
+or cause official TinyGS traffic to appear on a different broker.
