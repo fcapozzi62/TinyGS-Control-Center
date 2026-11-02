@@ -17,7 +17,7 @@ class TestMqttMonitor(unittest.TestCase):
         self.assertEqual(item["payload_size"], 5)
 
     def test_format_binary(self):
-        item = format_message("tinygs/a/b/stat/foff", b"\\x00\\xff", 0, False)
+        item = format_message("tinygs/a/b/stat/foff", bytes([0, 255]), 0, False)
         self.assertEqual(item["encoding"], "hex")
         self.assertEqual(item["payload_hex"], "00ff")
 
