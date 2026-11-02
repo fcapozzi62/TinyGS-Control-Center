@@ -66,6 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
     mqtt_monitor.add_argument("--topic", default="tinygs/#")
     mqtt_monitor.add_argument("--timeout-sec", type=float, default=30.0)
     mqtt_monitor.add_argument("--max-messages", type=int, default=0)
+    mqtt_monitor.add_argument("--summarize-stations", action="store_true",
+                              help="Print observed TinyGS station snapshots on exit")
     mqtt_dry = commands.add_parser(
         "mqtt-dry-run", help="Preview TinyGS Doppler foff message (no network)"
     )
@@ -167,7 +169,8 @@ def main(argv: list[str] | None = None) -> int:
             if not password:
                 raise ValueError("TCC_MQTT_PASSWORD environment variable is required")
             return monitor(args.host, args.port, args.mqtt_user, password,
-                           args.topic, args.timeout_sec, args.max_messages)
+                           args.topic, args.timeout_sec, args.max_messages,
+                           args.summarize_stations)
         if args.command == "mqtt-dry-run":
             from .mqtt_adapter import DopplerConfig, build_foff_dry_run
             preview = build_foff_dry_run(
