@@ -139,3 +139,38 @@ absolute offset to 100000 Hz; this limit is not a firmware specification.
 There is intentionally no default calibration offset and no publish flag.
 The station name must match the MQTT station identifier, which may differ
 from the local orbital catalog station label.
+
+## Read-only MQTT monitor (implemented)
+
+`tcc mqtt-monitor` is a **subscriber only**. No command publishing,
+no oscillator adjustment, and no radio retuning. First confirm the broker
+works independently using `mosquitto_sub` and `mosquitto_pub` with an
+isolated test topic; do not change a working TinyGS station's broker.
+
+On Debian 12, with the virtual environment activated:
+
+```bash
+python -m pip install -e .
+read -r -s -p "MQTT password: " TCC_MQTT_PASSWORD; echo
+export TCC_MQTT_PASSWORD
+tcc mqtt-monitor --host 192.168.1.61 --port 1883 \
+    --mqtt-user tinygs_local --topic 'tinygs/#' \
+    --timeout-sec 60
+unset TCC_MQTT_PASSWORD
+```
+
+The password must NOT be committed, logged, or supplied via a `--password`
+command-line argument. The monitor prints JSON lines with UTC timestamp,
+topic, QoS, retained flag and payload; binary payloads are shown in
+hexadecimal. The runtime uses MQTT 3.1.1 / paho-mqtt 2.x, a transient
+client and a 30-second default timeout. `--max-messages N` stops after
+N messages; zero means no message-count limit. Ctrl-C also stops it.
+
+The initial broker test uses `tinygs/test/control-center`; this is
+only a test payload, NOT telemetry from `IZ0IBA_GS2`. If the Heltec is
+still connected to the official TinyGS MQTT broker, the local Mosquitto
+will not receive its telemetry automatically. No integration or forwarding
+to TinyGS.com has been claimed or enabled.
+
+Port 1883 is plaintext and should only be used on a trusted local network;
+add TLS and certificate validation before any remote/untrusted deployment.
