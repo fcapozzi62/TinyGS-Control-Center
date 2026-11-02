@@ -1,0 +1,117 @@
+# TinyGS MQTT contract: firmware-owned Doppler control
+
+Status: source-reviewed protocol note (2026-11-02), **not validated on a live station**.
+Reviewed upstream source: `tinygs/tinyGS` branch `beta`:
+- `tinyGS/src/Mqtt/MQTT_Client.h`
+- `tinyGS/src/Mqtt/MQTT_Client.cpp`, `manageMQTTData()`
+- `tinyGS/src/Radio/Radio.cpp`, `remoteSetFreqOffset()` and `tle()`
+- `tinyGS/src/Status.h`, `struct Tle`
+- `tinyGS/tinyGS.ino`, periodic TLE update loop
+
+## Ownership
+
+**Server:** selects the satellite and RF profile, holds pass assignment, sets
+configuration parameters when needed, logs observed performance.
+
+**Firmware:** computes current TLE Doppler, decides when to retune using
+`freqTol` and `refresh`, and performs local radio frequency changes.
+The MQTT server MUST NOT issue periodic frequency commands for Doppler
+tracking. The radio operates autonomously between MQTT messages when
+valid orbital data and a working clock are available.
+
+## Verified topic and payload shape
+
+Target topic template:
+
+```text
+tinygs/{mqtt_user}/{station_name}/cmnd/foff
+```
+
+JSON payload is a 3-element positional array:
+
+```json
+[calibration_offset_hz, doppler_tolerance_hz, refresh_interval_ms]
+```
+
+For example, `[125.0, 250, 1000]` means 125 Hz crystal calibration
+offset, 250 Hz Doppler tolerance and 1000 ms refresh. **125 Hz here is an
+illustrative value, not a recommended station calibration.**
+
+The firmware also accepts legacy single-value forms for the calibration
+offset alone. Sending `[0, 250, 1000]` will reset the currently applied
+calibration offset to zero, which may be WRONG for the receiver.
+
+A normal command outcome is emitted on:
+
+```text
+tinygs/{mqtt_user}/{station_name}/stat/foff
+```
+
+The response is **two raw binary bytes**, written from a `uint16_t`
+status value, not an ASCII or JSON string. A value of zero indicates
+the handler returned zero. Treat endianness as firmware/platform-specific,
+and verify on a test receiver; do not assume this ack proves actual
+oscillator error, live radio tuning or persistent application.
+
+## Defaults and implementation caveats
+
+Upstream `Status.h` defines:
+- `freqTol = 1200` Hz, stored as `uint16_t`.
+- `refresh = 4000` ms, stored as `uint16_t`.
+- `freqDoppler` and `new_freqDoppler` as floating point values.
+
+`tinyGS.ino` triggers `radio.tle()` periodically based on
+`status.tle.refresh`. The current upstream `Radio::tle()` applies
+a retune only for positive elevation and when the absolute Doppler
+difference exceeds `freqTol`. It currently assigns
+`freqDoppler = new_freqDoppler - freqTol` before `setFrequency()`;
+this is **asymmetric**, and is not equivalent to tuning exactly to the
+predicted Doppler. The simulator's legacy mode approximates this logic.
+
+Values from `foff` are applied to in-memory status structures.
+No persistence call is visible in `remoteSetFreqOffset()`; assume the
+parameters must be re-established after reboot or profile change until
+tested on actual firmware. The function performs no obvious range checks
+for the 3-element payload; the Control Center MUST validate inputs before
+allowing a publish, including preventing zero refresh.
+
+The reviewed `beta` may differ from custom Stage 2B firmware.
+Confirm the checked-out firmware commit and exact patch before any live
+transmission. A change from full `begin()` to fast SX1262 retune does not
+change who owns the Doppler decision.
+
+## Safe Control Center design (planned)
+
+1. Track station identity, connectivity and selected satellite separately.
+2. Store per-radio-profile `doppler_tolerance_hz` and `refresh_ms`.
+3. Store **station-level** crystal `calibration_offset_hz`, and never
+   assume it is zero; require an explicit known value before sending `foff`.
+4. On pass assignment, apply a validated configuration **once** if needed,
+   not a continuous stream of retune commands.
+5. Require and log status/acks; never infer success from MQTT QoS PUBACK
+   alone. Re-check after reconnect/reboot, with rate limits.
+6. Do not generate live MQTT messages before dry-run integration tests.
+7. Capture RX frame counts, decoder success, receive frequency and Doppler
+   diagnostics to compare thresholds in the field. No synthetic packet count
+   is a substitute for a measured reception metric.
+8. Respect the separate TinyGS.com forwarding feasibility milestone.
+
+### Proposed UI defaults, not firmware limits
+
+- Initial experimental threshold choices: 100, 250 and 500 Hz.
+- Initial refresh: 1000 ms for FSK experiments, not a validated optimum.
+- Treat `calibration_offset_hz` as mandatory known station configuration.
+- Label all threshold/refresh values as **runtime** settings unless a
+  persistence mechanism is verified.
+
+## Open validation items
+
+- Confirm the exact custom firmware's `foff` handler and fast-retune path.
+- Test live ack decoding and ensure a resulting retune is not triggered
+  immediately by updating only the threshold/offset.
+- Verify what happens across reconnection, reboot, new `begine` profile,
+  local web configuration and radio initialization.
+- Determine whether a reliable packet-busy signal exists, and whether
+  any proposed retune deferral can be implemented safely in the firmware.
+- Calibrate actual RF frequency accuracy and frame yields by threshold
+  on multiple passes.
