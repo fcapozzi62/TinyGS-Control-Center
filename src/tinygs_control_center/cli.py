@@ -53,6 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
     doppler.add_argument("--hours", type=float, default=24.0)
     doppler.add_argument("--freq-mhz", type=float, required=True)
     doppler.add_argument("--step-sec", type=int, default=60)
+    replay = commands.add_parser(
+        "telemetry-replay", help="Build station snapshots from offline JSONL MQTT messages"
+    )
+    replay.add_argument("path", type=Path, help="JSONL with topic and payload JSON")
     mqtt_monitor = commands.add_parser(
         "mqtt-monitor", help="Read MQTT telemetry only, never publish commands"
     )
@@ -130,6 +134,32 @@ def fetch_celestrak(norad: int) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "telemetry-replay":
+            from .telemetry import StationRegistry
+            registry = StationRegistry()
+            for line_num, line in enumerate(
+                    args.path.read_text(encoding="utf-8").splitlines(), 1):
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                    if not isinstance(record, dict):
+                        raise ValueError("expected JSON object")
+                    topic = record["topic"]
+                    payload = record["payload"]
+                    if not isinstance(topic, str) or not isinstance(payload, dict):
+                        raise ValueError("topic must be a string, payload a JSON object")
+                    at = record.get("received_at_utc")
+                    instant = (datetime.fromisoformat(at.replace("Z", "+00:00"))
+                               if isinstance(at, str) else None)
+                    registry.ingest(
+                        topic, json.dumps(payload).encode("utf-8"),
+                        received_at=instant,
+                    )
+                except (KeyError, ValueError, TypeError) as exc:
+                    raise ValueError(f"Invalid replay line {line_num}: {exc}") from exc
+            print(json.dumps(registry.snapshots(), indent=2))
+            return 0
         if args.command == "mqtt-monitor":
             import os
             from .mqtt_monitor import monitor
