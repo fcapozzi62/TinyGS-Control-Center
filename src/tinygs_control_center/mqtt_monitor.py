@@ -10,6 +10,8 @@ import sys
 import time
 from datetime import datetime, timezone
 
+from .telemetry import StationRegistry
+
 
 def validate_monitor_settings(host: str, port: int, topic: str,
                               timeout_sec: float, max_messages: int) -> None:
@@ -53,9 +55,27 @@ def format_message(topic: str, payload: bytes, qos: int, retain: bool) -> dict:
     return result
 
 
+def process_monitor_message(message, registry: StationRegistry | None = None) -> dict:
+    """Render one received MQTT message and optionally update station state.
+
+    Unsupported topics do not create stations. This function never publishes.
+    """
+    result = format_message(message.topic, message.payload,
+                            message.qos, message.retain)
+    if registry is not None:
+        registry.ingest(message.topic, message.payload)
+    return result
+
+
+def station_summary(registry: StationRegistry) -> dict:
+    """Snapshot observed stations without claiming online presence."""
+    return {"type": "station_summary", "stations": registry.snapshots()}
+
+
 def monitor(host: str, port: int, username: str, password: str,
             topic: str = "tinygs/#", timeout_sec: float = 30,
-            max_messages: int = 0) -> int:
+            max_messages: int = 0,
+            summarize_stations: bool = False) -> int:
     """Connect and subscribe; never transmit application MQTT messages.
 
     max_messages=0 continues until timeout or Ctrl-C. Password only enters
@@ -70,6 +90,7 @@ def monitor(host: str, port: int, username: str, password: str,
         raise ValueError("paho-mqtt not installed: run python -m pip install -e .") from exc
 
     state = {"connected": False, "count": 0, "failed": None}
+    registry = StationRegistry() if summarize_stations else None
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                          client_id="tcc-monitor", protocol=mqtt.MQTTv311)
     client.username_pw_set(username, password)
@@ -88,8 +109,7 @@ def monitor(host: str, port: int, username: str, password: str,
             state["failed"] = "MQTT broker rejected subscription"
 
     def on_message(_client, _userdata, message):
-        print(json.dumps(format_message(message.topic, message.payload,
-                                        message.qos, message.retain),
+        print(json.dumps(process_monitor_message(message, registry),
                          ensure_ascii=False), flush=True)
         state["count"] += 1
 
@@ -116,3 +136,6 @@ def monitor(host: str, port: int, username: str, password: str,
     finally:
         client.disconnect()
         client.loop_stop()
+        if registry is not None:
+            print(json.dumps(station_summary(registry),
+                             ensure_ascii=False), flush=True)
