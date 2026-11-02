@@ -53,6 +53,14 @@ def build_parser() -> argparse.ArgumentParser:
     doppler.add_argument("--hours", type=float, default=24.0)
     doppler.add_argument("--freq-mhz", type=float, required=True)
     doppler.add_argument("--step-sec", type=int, default=60)
+    ax100 = commands.add_parser(
+        "ax100-analyze", help="Offline AX.100 Mode 5 Golay/bit-alignment diagnostics"
+    )
+    ax100.add_argument("path", type=Path, help="Plain whitespace-separated hex bytes")
+    ax100.add_argument("--max-shift-bits", type=int, default=31,
+                       help="Maximum header bit offset to examine (0..256)")
+    ax100.add_argument("--show-all", action="store_true",
+                       help="Include all examined bit offsets in JSON output")
     replay = commands.add_parser(
         "telemetry-replay", help="Build station snapshots from offline JSONL MQTT messages"
     )
@@ -137,6 +145,14 @@ def fetch_celestrak(norad: int) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "ax100-analyze":
+            from .ax100_analyzer import analyze_ax100, parse_hex_dump
+            raw = parse_hex_dump(args.path.read_text(encoding="utf-8"))
+            report = analyze_ax100(raw, args.max_shift_bits)
+            if not args.show_all:
+                report.pop("all_offsets")
+            print(json.dumps(report, indent=2))
+            return 0
         if args.command == "telemetry-replay":
             from .telemetry import StationRegistry
             registry = StationRegistry()
