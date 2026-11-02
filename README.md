@@ -76,7 +76,7 @@ for limits and a synthetic packet-busy test.
 - No claim is made that a downloaded element set is accurate merely because it is recent.
 - Security: never commit MQTT credentials, device backups, tokens or local station configuration.
 
-See [architecture](docs/architecture.md), [orbital data](docs/orbital-data.md), [scheduler design](docs/scheduler-design.md), and [roadmap](docs/roadmap.md).
+See [architecture](docs/architecture.md), [orbital data](docs/orbital-data.md), [scheduler design](docs/scheduler-design.md), [firmware MQTT protocol and Doppler ownership](docs/firmware-mqtt-contract.md), and [roadmap](docs/roadmap.md).
 
 ### License
 
