@@ -9,6 +9,8 @@ import math
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+import ssl
 
 from .telemetry import StationRegistry
 
@@ -75,7 +77,8 @@ def station_summary(registry: StationRegistry) -> dict:
 def monitor(host: str, port: int, username: str, password: str,
             topic: str = "tinygs/#", timeout_sec: float = 30,
             max_messages: int = 0,
-            summarize_stations: bool = False) -> int:
+            summarize_stations: bool = False,
+            cafile: str | None = None) -> int:
     """Connect and subscribe; never transmit application MQTT messages.
 
     max_messages=0 continues until timeout or Ctrl-C. Password only enters
@@ -84,6 +87,13 @@ def monitor(host: str, port: int, username: str, password: str,
     validate_monitor_settings(host, port, topic, timeout_sec, max_messages)
     if not username or not password:
         raise ValueError("MQTT username and password are required")
+    if port == 8883 and not cafile:
+        raise ValueError("Port 8883 requires --cafile for authenticated TLS")
+    tls_ca = None
+    if cafile:
+        tls_ca = Path(cafile).expanduser()
+        if not tls_ca.is_file():
+            raise ValueError(f"MQTT TLS CA file not found: {tls_ca}")
     try:
         import paho.mqtt.client as mqtt
     except ImportError as exc:
@@ -94,6 +104,9 @@ def monitor(host: str, port: int, username: str, password: str,
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                          client_id="tcc-monitor", protocol=mqtt.MQTTv311)
     client.username_pw_set(username, password)
+    if tls_ca is not None:
+        context = ssl.create_default_context(cafile=str(tls_ca))
+        client.tls_set_context(context)
 
     def on_connect(_client, _userdata, _flags, reason_code, _properties):
         if reason_code.is_failure:
