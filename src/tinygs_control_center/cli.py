@@ -53,6 +53,19 @@ def build_parser() -> argparse.ArgumentParser:
     doppler.add_argument("--hours", type=float, default=24.0)
     doppler.add_argument("--freq-mhz", type=float, required=True)
     doppler.add_argument("--step-sec", type=int, default=60)
+    mqtt_dry = commands.add_parser(
+        "mqtt-dry-run", help="Preview TinyGS Doppler foff message (no network)"
+    )
+    mqtt_dry.add_argument("--mqtt-user", required=True,
+                          help="MQTT account topic identifier, not a password")
+    mqtt_dry.add_argument("--station", required=True,
+                          help="TinyGS MQTT station name")
+    mqtt_dry.add_argument("--offset-hz", type=float, required=True,
+                          help="Known receiver calibration offset in Hz (mandatory)")
+    mqtt_dry.add_argument("--tolerance-hz", type=int, required=True,
+                          help="Doppler retune threshold in Hz, 1..65535")
+    mqtt_dry.add_argument("--refresh-ms", type=int, required=True,
+                          help="Firmware Doppler refresh period in ms, 1..65535")
     simulation = commands.add_parser(
         "simulate-doppler", help="Offline threshold-based retune comparison"
     )
@@ -108,6 +121,14 @@ def fetch_celestrak(norad: int) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "mqtt-dry-run":
+            from .mqtt_adapter import DopplerConfig, build_foff_dry_run
+            preview = build_foff_dry_run(
+                args.mqtt_user, args.station,
+                DopplerConfig(args.offset_hz, args.tolerance_hz, args.refresh_ms),
+            )
+            print(json.dumps(preview, indent=2))
+            return 0
         if args.command == "fetch-omm":
             records = fetch_celestrak(args.norad)
             source = "celestrak"
