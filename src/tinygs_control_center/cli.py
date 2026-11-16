@@ -101,6 +101,31 @@ def build_parser() -> argparse.ArgumentParser:
     begine.add_argument("--tle-file", type=Path,
                         help="Optional 2-line TLE file; replaces profile tle/tlx")
 
+    mqtt_test = commands.add_parser(
+        "mqtt-publish-test", help="Publish a harmless probe on an isolated MQTT topic"
+    )
+    mqtt_test.add_argument("--host", required=True)
+    mqtt_test.add_argument("--port", type=int, default=1883)
+    mqtt_test.add_argument("--mqtt-user", required=True)
+    mqtt_test.add_argument("--topic", default="tinygs/test/control-center")
+    mqtt_test.add_argument("--message", default="tcc-connectivity-probe")
+    mqtt_test.add_argument("--cafile")
+    mqtt_test.add_argument("--timeout-sec", type=float, default=10.0)
+
+    mqtt_send = commands.add_parser(
+        "mqtt-begine-send", help="Send a validated begine command (changes radio tuning)"
+    )
+    mqtt_send.add_argument("--host", required=True)
+    mqtt_send.add_argument("--port", type=int, default=1883)
+    mqtt_send.add_argument("--mqtt-user", required=True)
+    mqtt_send.add_argument("--station", required=True)
+    mqtt_send.add_argument("--profile", type=Path, required=True)
+    mqtt_send.add_argument("--tle-file", type=Path)
+    mqtt_send.add_argument("--cafile")
+    mqtt_send.add_argument("--timeout-sec", type=float, default=10.0)
+    mqtt_send.add_argument("--confirm-tune", action="store_true", required=True,
+                           help="Required acknowledgement that this command retunes the radio")
+
     simulation = commands.add_parser(
         "simulate-doppler", help="Offline threshold-based retune comparison"
     )
@@ -199,6 +224,37 @@ def main(argv: list[str] | None = None) -> int:
             return monitor(args.host, args.port, args.mqtt_user, password,
                            args.topic, args.timeout_sec, args.max_messages,
                            args.summarize_stations, args.cafile)
+        if args.command in ("mqtt-publish-test", "mqtt-begine-send"):
+            import os
+            from .mqtt_publisher import publish_message
+            password = os.environ.get("TCC_MQTT_PASSWORD", "")
+            if args.command == "mqtt-publish-test":
+                if not args.topic.startswith("tinygs/test/"):
+                    raise ValueError("Test topic must begin with tinygs/test/")
+                topic, payload = args.topic, args.message
+            else:
+                from .begine import build_begine_dry_run
+                profile = json.loads(args.profile.read_text(encoding="utf-8"))
+                orbit_lines = None
+                if args.tle_file:
+                    orbit_lines = [
+                        line.strip() for line in
+                        args.tle_file.read_text(encoding="ascii").splitlines()
+                        if line.strip()
+                    ]
+                    if len(orbit_lines) == 3:
+                        orbit_lines = orbit_lines[1:]
+                    if len(orbit_lines) != 2:
+                        raise ValueError("TLE file requires 2 element lines")
+                    orbit_lines = tuple(orbit_lines)
+                preview = build_begine_dry_run(
+                    args.mqtt_user, args.station, profile, orbit_lines)
+                topic, payload = preview["topic"], preview["payload"]
+            result = publish_message(
+                args.host, args.port, args.mqtt_user, password, topic, payload,
+                cafile=args.cafile, timeout_sec=args.timeout_sec)
+            print(json.dumps(result, indent=2))
+            return 0
         if args.command == "mqtt-begine-dry-run":
             from .begine import build_begine_dry_run
             profile = json.loads(args.profile.read_text(encoding="utf-8"))
