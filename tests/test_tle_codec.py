@@ -8,11 +8,11 @@ from tinygs_control_center.tle_codec import (
 )
 
 
-def _line(number: str, fields: list[tuple[int, int, str]]) -> str:
+def _line(number: str, fields: list[tuple[int, int, str]], catalog: str = "61784") -> str:
     """Build a valid 69-column TLE fixture with a computed checksum."""
     chars = list(" " * 68)
     chars[0] = number
-    chars[2:7] = list("61784")
+    chars[2:7] = list(catalog)
     for start, end, value in fields:
         assert len(value) == end - start, (start, end, value)
         chars[start:end] = list(value)
@@ -66,6 +66,32 @@ class TinyGsTleCodecTests(unittest.TestCase):
         self.assertEqual(len(encoded), 48)
         self.assertEqual(base64.b64decode(encoded, validate=True),
                          encode_tinygs_tle(*lines))
+
+    def test_real_tinygs_ion_scv_006_profile(self):
+        """Field values recovered from a real TinyGS manual profile's TLE.
+
+        The original textual TLE is unavailable, so these fixture lines
+        reconstruct its representable fields and valid checksums. Comparing
+        the resulting bytes against the observed Base64 checks the encoding
+        independently of the synthetic fixture used above.
+        """
+        line1 = _line("1", [
+            (18, 20, "26"),
+            (20, 32, "320.18270110"),
+            (33, 43, " .00013215"),
+        ], catalog="52761")
+        line2 = _line("2", [
+            (8, 16, " 97.6268"),
+            (17, 25, "116.6752"),
+            (26, 33, "0014645"),
+            (34, 42, "284.5413"),
+            (43, 51, " 75.4213"),
+            (52, 63, "15.48548079"),
+            (63, 68, "24961"),
+        ], catalog="52761")
+        expected = "GgFAARbHngAAM58O5YwRzaAAADk1K2rlC4IlXEz37wBhgQ=="
+        self.assertEqual(encode_tinygs_tle_base64(line1, line2), expected)
+        self.assertEqual(len(base64.b64decode(expected, validate=True)), 34)
 
     def test_reject_checksum_mismatch(self):
         l1, l2 = _fixture()
