@@ -250,11 +250,17 @@ def main(argv: list[str] | None = None) -> int:
                 preview = build_begine_dry_run(
                     args.mqtt_user, args.station, profile, orbit_lines)
                 topic, payload = preview["topic"], preview["payload"]
-            result = publish_message(
-                args.host, args.port, args.mqtt_user, password, topic, payload,
-                cafile=args.cafile, timeout_sec=args.timeout_sec)
+            if args.command == "mqtt-begine-send":
+                from .mqtt_command import publish_begine_and_wait
+                result = publish_begine_and_wait(
+                    args.host, args.port, args.mqtt_user, password, topic, payload,
+                    cafile=args.cafile, timeout_sec=args.timeout_sec)
+            else:
+                result = publish_message(
+                    args.host, args.port, args.mqtt_user, password, topic, payload,
+                    cafile=args.cafile, timeout_sec=args.timeout_sec)
             print(json.dumps(result, indent=2))
-            return 0
+            return 0 if args.command != "mqtt-begine-send" or result["receiver_accepted"] else 1
         if args.command == "mqtt-begine-dry-run":
             from .begine import build_begine_dry_run
             profile = json.loads(args.profile.read_text(encoding="utf-8"))
