@@ -90,6 +90,17 @@ def build_parser() -> argparse.ArgumentParser:
                           help="Doppler retune threshold in Hz, 1..65535")
     mqtt_dry.add_argument("--refresh-ms", type=int, required=True,
                           help="Firmware Doppler refresh period in ms, 1..65535")
+    begine = commands.add_parser(
+        "mqtt-begine-dry-run",
+        help="Preview a complete TinyGS begine profile command (no network)"
+    )
+    begine.add_argument("--mqtt-user", required=True)
+    begine.add_argument("--station", required=True)
+    begine.add_argument("--profile", type=Path, required=True,
+                        help="Local JSON modem profile, e.g. saved manual tuning")
+    begine.add_argument("--tle-file", type=Path,
+                        help="Optional 2-line TLE file; replaces profile tle/tlx")
+
     simulation = commands.add_parser(
         "simulate-doppler", help="Offline threshold-based retune comparison"
     )
@@ -188,6 +199,25 @@ def main(argv: list[str] | None = None) -> int:
             return monitor(args.host, args.port, args.mqtt_user, password,
                            args.topic, args.timeout_sec, args.max_messages,
                            args.summarize_stations, args.cafile)
+        if args.command == "mqtt-begine-dry-run":
+            from .begine import build_begine_dry_run
+            profile = json.loads(args.profile.read_text(encoding="utf-8"))
+            orbit_lines = None
+            if args.tle_file is not None:
+                orbit_lines = [
+                    line.strip() for line in
+                    args.tle_file.read_text(encoding="ascii").splitlines()
+                    if line.strip()
+                ]
+                if len(orbit_lines) == 3:
+                    orbit_lines = orbit_lines[1:]
+                if len(orbit_lines) != 2:
+                    raise ValueError("TLE file must have 2 lines, optionally preceded by a name")
+                orbit_lines = tuple(orbit_lines)
+            preview = build_begine_dry_run(
+                args.mqtt_user, args.station, profile, orbit_lines)
+            print(json.dumps(preview, indent=2))
+            return 0
         if args.command == "mqtt-dry-run":
             from .mqtt_adapter import DopplerConfig, build_foff_dry_run
             preview = build_foff_dry_run(
