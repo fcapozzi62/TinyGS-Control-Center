@@ -2,7 +2,7 @@
 """Preview or apply the orbit-only clock hook to a local tinyGS-fsk-fifo tree.
 
 Default: show unified diff, no writes. --apply copies headers and modifies
-ONLY Radio::tle() in tinyGS/src/Radio/Radio.cpp. Never flashes the receiver.
+ONLY Radio::tle(...) in tinyGS/src/Radio/Radio.cpp. Never flashes the receiver.
 """
 from __future__ import annotations
 
@@ -17,11 +17,53 @@ def patch_radio_text(original: str) -> str:
     marker = '#include "Radio.h"'
     if original.count(marker) != 1:
         raise ValueError("Expected exactly one Radio.h include")
-    head = original.find("void Radio::tle()")
-    tail = original.find("void Radio::setFlag()", head)
-    if head < 0 or tail < 0:
-        raise ValueError("Could not isolate Radio::tle() safely")
-    before, body, after = original[:head], original[head:tail], original[tail:]
+    match = re.search(r"\\bvoid\\s+Radio::tle\\s*\\([^)]*\\)\\s*\\{", original)
+    if not match:
+        raise ValueError("Could not find Radio::tle(...)")
+    # Restrict the replacement to this method, independently of the
+    # signature and of the method that follows it. Braces in comments and
+    # literals are ignored, so the scope cannot spill into another method.
+    brace_start = original.find("{", match.start())
+    depth = 0
+    state = "code"
+    i = brace_start
+    end = -1
+    while i < len(original):
+        c = original[i]
+        n = original[i + 1] if i + 1 < len(original) else ""
+        if state == "line":
+            if c == "\\n":
+                state = "code"
+        elif state == "block":
+            if c == "*" and n == "/":
+                state = "code"
+                i += 1
+        elif state in ("single", "double"):
+            if c == "\\\\":
+                i += 1
+            elif (state == "single" and c == "'") or (state == "double" and c == '"'):
+                state = "code"
+        elif c == "/" and n == "/":
+            state = "line"
+            i += 1
+        elif c == "/" and n == "*":
+            state = "block"
+            i += 1
+        elif c == "'":
+            state = "single"
+        elif c == '"':
+            state = "double"
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+        i += 1
+    if end < 0:
+        raise ValueError("Could not find end of Radio::tle(...)")
+    before, body, after = original[:match.start()], original[match.start():end], original[end:]
     new_body, n = re.subn(
         r"time_t\s+currenttime\s*=\s*time\(NULL\)\s*;",
         "time_t currenttime = VirtualOrbitClock::now();",
