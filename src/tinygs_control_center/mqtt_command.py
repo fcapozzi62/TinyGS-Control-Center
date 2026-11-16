@@ -12,8 +12,6 @@ import threading
 import time
 from pathlib import Path
 
-from .mqtt_publisher import publish_message
-
 
 def decode_begine_ack(payload: bytes) -> int:
     """Decode firmware uint16_t ACK; zero means command handler completed."""
