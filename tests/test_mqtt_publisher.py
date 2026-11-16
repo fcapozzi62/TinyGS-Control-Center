@@ -44,12 +44,12 @@ class MqttPublishTests(unittest.TestCase):
         self.assertEqual(transport.call_args.args[4], "tinygs/test/control-center")
 
     def test_binary_ack_decoder(self):
-        self.assertEqual(decode_begine_ack(b"\\x00\\x00"), 0)
-        self.assertEqual(decode_begine_ack(b"\\x01\\x00"), 1)
-        self.assertEqual(decode_begine_ack(b"\\xff\\x00"), 255)
-        self.assertEqual(decode_begine_ack(b"\\x00\\x01"), 256)
-        self.assertEqual(decode_begine_ack(b"\\xff\\xff"), 65535)
-        for invalid in (b"", b"\\x00", b"\\x00\\x00\\x00", "ok"):
+        self.assertEqual(decode_begine_ack(b"\x00\x00"), 0)
+        self.assertEqual(decode_begine_ack(b"\x01\x00"), 1)
+        self.assertEqual(decode_begine_ack(b"\xff\x00"), 255)
+        self.assertEqual(decode_begine_ack(b"\x00\x01"), 256)
+        self.assertEqual(decode_begine_ack(b"\xff\xff"), 65535)
+        for invalid in (b"", b"\x00", b"\x00\x00\x00", "ok"):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 decode_begine_ack(invalid)
 
