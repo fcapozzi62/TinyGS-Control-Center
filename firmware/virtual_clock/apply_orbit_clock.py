@@ -17,7 +17,7 @@ def patch_radio_text(original: str) -> str:
     marker = '#include "Radio.h"'
     if original.count(marker) != 1:
         raise ValueError("Expected exactly one Radio.h include")
-    match = re.search(r"\\bvoid\\s+Radio::tle\\s*\\([^)]*\\)\\s*\\{", original)
+    match = re.search(r"\bvoid\s+Radio::tle\s*\([^)]*\)\s*\{", original)
     if not match:
         raise ValueError("Could not find Radio::tle(...)")
     # Restrict the replacement to this method, independently of the
@@ -32,14 +32,14 @@ def patch_radio_text(original: str) -> str:
         c = original[i]
         n = original[i + 1] if i + 1 < len(original) else ""
         if state == "line":
-            if c == "\\n":
+            if c == "\n":
                 state = "code"
         elif state == "block":
             if c == "*" and n == "/":
                 state = "code"
                 i += 1
         elif state in ("single", "double"):
-            if c == "\\\\":
+            if c == "\\":
                 i += 1
             elif (state == "single" and c == "'") or (state == "double" and c == '"'):
                 state = "code"
